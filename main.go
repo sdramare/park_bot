@@ -76,11 +76,11 @@ func main() {
 			if update.Message.Text == "/open" {
 				err := voipClient.MakeCall(source, target)
 				if err != nil {
-					slog.Error("Failed to make call", "error", err)
+					slog.Error("Failed to open", "error", err)
 					msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Failed to make call: %s", err.Error()))
 					bot.Send(msg)
 				} else {
-					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Call initiated successfully.")
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Open successfully.")
 					bot.Send(msg)
 				}
 			}

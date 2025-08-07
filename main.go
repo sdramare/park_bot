@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -12,46 +11,26 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/joho/godotenv"
 )
 
 func main() {
 
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	slog.Info("Starting app...")
-	godotenv.Load()
+	config, err := LoadConfig()
 
-	source := os.Getenv("TWILIO_SOURCE_NUMBER")
-	if source == "" {
-		log.Fatal("Please set the TWILIO_SOURCE_NUMBER environment variable.")
-	}
-
-	target := os.Getenv("TWILIO_TARGET_NUMBER")
-	if target == "" {
-		log.Fatal("Please set the TWILIO_TARGET_NUMBER environment variable.")
-	}
-
-	tg_token := os.Getenv("TG_BOT_API_TOKEN")
-	if tg_token == "" {
-		log.Fatal("Please set the TG_BOT_API_TOKEN environment variable.")
-	}
-
-	bot, err := tgbotapi.NewBotAPI(tg_token)
 	if err != nil {
-		log.Fatal("Could not create Telegram bot: ", err)
+		slog.Error("Failed to load configuration", "error", err)
+		os.Exit(1)
 	}
 
-	accountSid := os.Getenv("TWILIO_ACCOUNT_SID")
-	if accountSid == "" {
-		log.Fatal("Please set the TWILIO_ACCOUNT_SID environment variable.")
+	bot, err := tgbotapi.NewBotAPI(config.TgBotApiToken)
+	if err != nil {
+		slog.Error("Could not create Telegram bot", "error", err)
+		os.Exit(1)
 	}
 
-	authToken := os.Getenv("TWILIO_AUTH_TOKEN")
-	if authToken == "" {
-		log.Fatal("Please set the TWILIO_AUTH_TOKEN environment variable.")
-	}
-
-	voipClient := voip.NewVoipClient(accountSid, authToken)
+	voipClient := voip.NewVoipClient(config.TwilioAccountSID, config.TwilioAuthToken)
 
 	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		slog.Info("Received request", "method", r.Method, "url", r.URL.String())
@@ -74,7 +53,7 @@ func main() {
 				"text", update.Message.Text)
 
 			if update.Message.Text == "/open_underground_parking" {
-				err := voipClient.MakeCall(source, target)
+				err := voipClient.MakeCall(config.SourceNumber, config.TargetNumber)
 				if err != nil {
 					slog.Error("Failed to open", "error", err)
 					msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Failed to make call: %s", err.Error()))

@@ -73,7 +73,7 @@ func main() {
 				"user_name", update.Message.Chat.UserName,
 				"text", update.Message.Text)
 
-			if update.Message.Text == "/open" {
+			if update.Message.Text == "/open_underground_parking" {
 				err := voipClient.MakeCall(source, target)
 				if err != nil {
 					slog.Error("Failed to open", "error", err)

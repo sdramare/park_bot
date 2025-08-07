@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -19,11 +21,6 @@ func main() {
 	slog.Info("Starting app...")
 	godotenv.Load()
 
-	bot, err := tgbotapi.NewBotAPI(os.Getenv("TG_BOT_API_TOKEN"))
-	if err != nil {
-		log.Fatal("create tgbotapi ", err)
-	}
-
 	source := os.Getenv("TWILIO_SOURCE_NUMBER")
 	if source == "" {
 		log.Fatal("Please set the TWILIO_SOURCE_NUMBER environment variable.")
@@ -34,25 +31,57 @@ func main() {
 		log.Fatal("Please set the TWILIO_TARGET_NUMBER environment variable.")
 	}
 
+	tg_token := os.Getenv("TG_BOT_API_TOKEN")
+	if tg_token == "" {
+		log.Fatal("Please set the TG_BOT_API_TOKEN environment variable.")
+	}
+
+	bot, err := tgbotapi.NewBotAPI(tg_token)
+	if err != nil {
+		log.Fatal("Could not create Telegram bot: ", err)
+	}
+
+	accountSid := os.Getenv("TWILIO_ACCOUNT_SID")
+	if accountSid == "" {
+		log.Fatal("Please set the TWILIO_ACCOUNT_SID environment variable.")
+	}
+
+	authToken := os.Getenv("TWILIO_AUTH_TOKEN")
+	if authToken == "" {
+		log.Fatal("Please set the TWILIO_AUTH_TOKEN environment variable.")
+	}
+
+	voipClient := voip.NewVoipClient(accountSid, authToken)
+
 	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		slog.Info("Received request", "method", r.Method, "url", r.URL.String())
 
-		updates := bot.ListenForWebhookRespReqFormat(w, r)
-		for update := range updates {
+		update, err := bot.HandleUpdate(r)
+		if err != nil {
+			slog.Error("Failed to handle update", "error", err)
+			errMsg, _ := json.Marshal(map[string]string{"error": err.Error()})
+			w.WriteHeader(http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(errMsg)
+			return
+		}
 
-			if update.Message != nil {
-				slog.Info("Received message", "chat_id", update.Message.Chat.ID, "user_name", update.Message.Chat.UserName, "text", update.Message.Text)
+		if update.Message != nil {
+			slog.Info(
+				"Received message",
+				"chat_id", update.Message.Chat.ID,
+				"user_name", update.Message.Chat.UserName,
+				"text", update.Message.Text)
 
-				if update.Message.Text == "/open" {
-					err := voip.MakeCall(source, target)
-					if err != nil {
-						slog.Error("Failed to make call", "error", err)
-						msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Failed to make call: "+err.Error())
-						bot.Send(msg)
-					} else {
-						msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Call initiated successfully.")
-						bot.Send(msg)
-					}
+			if update.Message.Text == "/open" {
+				err := voipClient.MakeCall(source, target)
+				if err != nil {
+					slog.Error("Failed to make call", "error", err)
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Failed to make call: %s", err.Error()))
+					bot.Send(msg)
+				} else {
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Call initiated successfully.")
+					bot.Send(msg)
 				}
 			}
 		}
